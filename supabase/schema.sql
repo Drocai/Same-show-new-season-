@@ -240,3 +240,102 @@ create index if not exists idx_locations_type on public.locations(location_type)
 create index if not exists idx_measurements_user on public.measurements(user_id);
 create index if not exists idx_measurements_location on public.measurements(location_id);
 create index if not exists idx_profiles_vibrations on public.profiles(vibrations desc);
+
+-- Location Photos Table
+CREATE TABLE IF NOT EXISTS location_photos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  location_id UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  photo_url TEXT NOT NULL,
+  uploaded_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_location_photos_location ON location_photos(location_id);
+CREATE INDEX idx_location_photos_user ON location_photos(uploaded_by);
+
+-- RLS Policies
+ALTER TABLE location_photos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view photos"
+  ON location_photos FOR SELECT
+  USING (true);
+
+CREATE POLICY "Authenticated users can upload photos"
+  ON location_photos FOR INSERT
+  WITH CHECK (auth.uid() = uploaded_by);
+
+CREATE POLICY "Users can delete their own photos"
+  ON location_photos FOR DELETE
+  USING (auth.uid() = uploaded_by);
+
+-- Storage bucket for location photos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('location-photos', 'location-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies
+CREATE POLICY "Anyone can view location photos"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'location-photos');
+
+CREATE POLICY "Authenticated users can upload location photos"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'location-photos' AND
+    auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "Users can delete their own location photos"
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'location-photos' AND
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+
+-- Vibes Sent Table (Social Feature)
+CREATE TABLE IF NOT EXISTS vibes_sent (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sender_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  recipient_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  location_id UUID REFERENCES locations(id) ON DELETE SET NULL,
+  vibe_type TEXT NOT NULL CHECK (vibe_type IN ('positive', 'energy', 'love', 'appreciation', 'excellence')),
+  message TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_vibes_sender ON vibes_sent(sender_id);
+CREATE INDEX idx_vibes_recipient ON vibes_sent(recipient_id);
+CREATE INDEX idx_vibes_location ON vibes_sent(location_id);
+CREATE INDEX idx_vibes_created ON vibes_sent(created_at DESC);
+
+-- RLS Policies
+ALTER TABLE vibes_sent ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view vibes they sent or received"
+  ON vibes_sent FOR SELECT
+  USING (auth.uid() = sender_id OR auth.uid() = recipient_id);
+
+CREATE POLICY "Authenticated users can send vibes"
+  ON vibes_sent FOR INSERT
+  WITH CHECK (auth.uid() = sender_id);
+
+-- Function to add vibrations
+CREATE OR REPLACE FUNCTION add_vibrations(user_id UUID, amount INTEGER, reason TEXT)
+RETURNS VOID AS $$
+BEGIN
+  -- Update profile vibrations
+  UPDATE profiles
+  SET vibrations = vibrations + amount,
+      updated_at = NOW()
+  WHERE id = user_id;
+  
+  -- Record transaction
+  INSERT INTO resonance_transactions (user_id, amount, reason)
+  VALUES (user_id, amount, reason);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+

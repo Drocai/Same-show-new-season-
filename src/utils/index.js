@@ -298,21 +298,8 @@ export const isStandalone = () => {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
 };
 
-/**
- * Trigger haptic feedback (if available)
- */
-export const hapticFeedback = (type = 'light') => {
-  if ('vibrate' in navigator) {
-    const patterns = {
-      light: 10,
-      medium: 20,
-      heavy: 30,
-      success: [10, 50, 10],
-      error: [20, 100, 20],
-    };
-    navigator.vibrate(patterns[type] || patterns.light);
-  }
-};
+// Import comprehensive haptic feedback
+export * from './haptics';
 
 /**
  * Copy text to clipboard

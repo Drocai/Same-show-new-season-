@@ -6,3 +6,4 @@ export { default as Loading } from './Loading';
 export { default as Input, Textarea, Select } from './Input';
 export { default as Toast } from './Toast';
 export { default as ErrorBoundary } from './ErrorBoundary';
+export { default as HapticButton } from './HapticButton';
