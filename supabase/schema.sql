@@ -334,8 +334,8 @@ BEGIN
   WHERE id = user_id;
   
   -- Record transaction
-  INSERT INTO resonance_transactions (user_id, amount, reason)
-  VALUES (user_id, amount, reason);
+  INSERT INTO resonance_transactions (user_id, amount, transaction_type, description)
+  VALUES (user_id, amount, 'send_vibes', reason);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
